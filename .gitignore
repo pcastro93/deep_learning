@@ -1,0 +1,44 @@
+# Local environment configuration
+.env
+
+# Python virtual environments
+.venv/
+venv/
+ENV/
+
+# Python cache and compiled files
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*$py.class
+build/
+dist/
+wheels/
+*.egg-info
+
+# dbt generated files
+target/
+dbt_packages/
+logs/
+
+# OS-specific files
+.DS_Store
+.directory
+Thumbs.db
+
+# IDE and editor configuration
+.vscode/
+.idea/
+.zed/
+*.swp
+*.swo
+.ruff_cache
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Raw data files
+data/
+
+# Others
+pyrightconfig.json
