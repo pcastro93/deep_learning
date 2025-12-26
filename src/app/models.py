@@ -122,6 +122,9 @@ class Matrix:
     def flatten(self) -> list[float]:
         return [self.matrix[i][j] for i in range(self.rows) for j in range(self.cols)]
 
+    def to_list(self) -> list[list]:
+        return [[self.matrix[i][j] for j in range(self.cols)] for i in range(self.rows)]
+
     @property
     def shape(self) -> tuple[int, int]:
         return self.rows, self.cols
@@ -215,7 +218,7 @@ class LinearUnit:
                 #               = (2/x.rows) * sum(error)
                 error = y_pred + (current_batch_y * -1)
                 # because d_loss/dy is in both gradients we can reuse it
-                dl_dy = error * (2 / current_batch_x.rows)
+                dl_dy = error * (2 / (current_batch_x.rows * current_batch_y.cols))
                 w_gradient = current_batch_x.transpose() * dl_dy
                 b_gradient = dl_dy.reduce()
                 # logger.info("error=\n[%s]\n", error)
