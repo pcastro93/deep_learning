@@ -1,4 +1,5 @@
 import copy
+import math
 import random
 from typing import Callable, Generator, Self, override
 
@@ -221,6 +222,163 @@ class LinearUnit:
                 dl_dy = error * (2 / (current_batch_x.rows * current_batch_y.cols))
                 w_gradient = current_batch_x.transpose() * dl_dy
                 b_gradient = dl_dy.reduce()
+                # logger.info("error=\n[%s]\n", error)
+                # logger.info("w_gradient=\n[%s]\n", w_gradient)
+                # logger.info("b_gradient=\n[%s]\n", b_gradient)
+                error_sq = error.hadamard_product(error)
+
+                batch_loss = sum(error_sq.reduce().matrix[0]) / (
+                    error_sq.rows * error_sq.cols
+                )
+                epoch_loss += batch_loss
+                self.batch_loss_scores.append(batch_loss)
+
+                self.w_current = self.w_current + (w_gradient * learning_rate) * -1
+                self.b_current = self.b_current + (b_gradient * learning_rate) * -1
+            self.epoch_loss_scores.append(epoch_loss / current_batch_size)
+
+    def infer(self, x: list[list]):
+        x_mat = Matrix(matrix=x)
+        return x_mat * self.w_current + self.b_current
+
+
+class Perceptron:
+    def __init__(
+        self,
+        data_x: list[list],
+        data_y: list[list],
+        activation_function: str = "relu",
+        initializer: str = "he_normal",
+    ):
+        self.data_x = copy.deepcopy(data_x)
+        self.data_y = copy.deepcopy(data_y)
+        self.w_current: Matrix | None = None
+        self.b_current: Matrix | None = None
+        self.activation_function_name = activation_function
+        self.activation_function = Perceptron._get_activation_function(
+            activation_function
+        )
+        self.initializer_name = initializer
+        self.epoch_loss_scores: list | None = None
+        self.batch_loss_scores: list | None = None
+
+    @staticmethod
+    def _get_activation_function(name: str):
+        if name == "relu":
+            return lambda x: Matrix(matrix=[[max(0, val) for val in row] for row in x])
+        elif name == "sigmoid":
+            return lambda x: Matrix(
+                matrix=[[1 / (1 + math.exp(-val)) for val in row] for row in x]
+            )
+        elif name == "tanh":
+            return lambda x: Matrix(
+                matrix=[[math.tanh(val) for val in row] for row in x]
+            )
+        else:
+            raise ValueError(f"Unknown activation function: {name}")
+
+    @staticmethod
+    def _get_activation_function_derivative(name: str):
+        if name == "relu":
+            return lambda x: Matrix(
+                matrix=[[1 if val > 0 else 0 for val in row] for row in x]
+            )
+        elif name == "sigmoid":
+            return lambda x: Matrix(
+                matrix=[
+                    [
+                        (1 / (1 + math.exp(-val))) * (1 - (1 / (1 + math.exp(-val))))
+                        for val in row
+                    ]
+                    for row in x
+                ]
+            )
+        elif name == "tanh":
+            return lambda x: Matrix(
+                matrix=[[1 - math.tanh(val) ** 2 for val in row] for row in x]
+            )
+        else:
+            raise ValueError(f"Unknown activation function: {name}")
+
+    @staticmethod
+    def _get_initializer_function(name: str, w_shape: tuple):
+        if name == "uniform":
+            return lambda: random.uniform(-1, 1)
+        elif name == "normal":
+            return lambda: random.normalvariate(0, 1)
+        elif name == "he_normal":
+            return lambda: random.normalvariate(0, math.sqrt(2 / w_shape[0]))
+        else:
+            raise ValueError(f"Unknown initializer function: {name}")
+
+    def train(self, learning_rate: float, epochs: int, batch_size: int):
+        # ========================================
+        # n: features (inputs)
+        # m: batch size
+        # k: outputs of the linear unit
+        # ========================================
+        # x: batch input (multiple inputs (each with n features)). matrix of mxn
+        # w: weights. matrix of nxk dimensions
+        # b: matrix of 1xk dimensions
+        # y: matrix of mxk dimensions
+        # a: matrix of mxk dimensions
+
+        # Initialize weights and biases
+        self.w_current = Matrix(rows=len(self.data_x[0]), cols=len(self.data_y[0]))
+        self.w_current.populate(
+            self._get_initializer_function(self.initializer_name, self.w_current.shape)
+        )
+        self.b_current = Matrix(rows=1, cols=len(self.data_y[0]))
+
+        self.epoch_loss_scores = []
+        self.batch_loss_scores = []
+
+        for epoch_i in range(epochs):
+            logger.debug("Epoch: %s/%s", epoch_i + 1, epochs)
+            epoch_loss = 0.0
+            current_batch_size = 0
+            for current_batch in get_batches(self.data_x, self.data_y, batch_size):
+                current_batch_size += 1
+                current_batch_x = Matrix(matrix=current_batch[0])
+                current_batch_y = Matrix(matrix=current_batch[1])
+                y = current_batch_x * self.w_current + self.b_current
+                a = self.activation_function(y)
+
+                # Linear sum
+                # f(x) = y = wx + b
+                # Activation function (a is the output of the perceptron)
+                # relu(y) = a = max(0, y)
+                # Loss function (MSE)
+                # loss(a) = (1/(x.rows*y.cols)) * (a - y_expected)**2
+                # h(g(f(x))) = loss(activation(f(x)))
+                #
+                # Gradient of W (d_w):
+                # d_loss/d_w = d_loss/d_a * d_a/d_y * d_y/d_w # chain rule
+                # d_loss/d_a = 2 * (1/(x.rows*y.cols)) * (a - y_expected)
+                # d_a/d_y = 1 if y > 0 else 0
+                # d_y/d_w = x
+                # So: d_loss/d_w = [(2/(x.rows*y.cols)) * (a - y_expected)] * [1 if y > 0 else 0] * [x]
+                # error = (a - y_expected)
+                # Then:
+                # w_gradient = [(2/(x.rows*y.cols)) * error] * [1 if y > 0 else 0] * x
+                #
+                # Gradient of B (d_b)
+                # d_loss/d_b = d_loss/d_a * d_a/d_y * d_y/d_b
+                # d_y/d_b = 1
+                # d_loss/d_b = [2 * (1/(x.rows*y.cols)) * (a - y_expected)] * [1 if y > 0 else 0]
+                # Because b is added x.rows times (one per input)
+                # d_b = sum(d_loss/d_b)
+                #     = sum_of_the_rows_of([2 * (1/(x.rows*y.cols)) * (a - y_expected)] * [1 if y > 0 else 0])
+                #     = (2/(x.rows*y.cols)) * sum_of_the_rows_of(error * [1 if y > 0 else 0])
+                error = a + (current_batch_y * -1)
+                # because d_loss/d_a and d_a/d_y are in both gradients we can reuse them
+                dl_da = error * (2 / (current_batch_x.rows * current_batch_y.cols))
+                da_dy = Perceptron._get_activation_function_derivative(
+                    self.activation_function_name
+                )(y)
+                dl_da_x_da_dy = dl_da.hadamard_product(da_dy)
+                w_gradient = current_batch_x.transpose() * dl_da_x_da_dy
+                b_gradient = dl_da_x_da_dy.reduce()
                 # logger.info("error=\n[%s]\n", error)
                 # logger.info("w_gradient=\n[%s]\n", w_gradient)
                 # logger.info("b_gradient=\n[%s]\n", b_gradient)
