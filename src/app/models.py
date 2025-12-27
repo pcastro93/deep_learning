@@ -265,14 +265,16 @@ class Perceptron:
     @staticmethod
     def _get_activation_function(name: str):
         if name == "relu":
-            return lambda x: Matrix(matrix=[[max(0, val) for val in row] for row in x])
+            return lambda x: Matrix(
+                matrix=[[max(0, val) for val in row] for row in x.matrix]
+            )
         elif name == "sigmoid":
             return lambda x: Matrix(
-                matrix=[[1 / (1 + math.exp(-val)) for val in row] for row in x]
+                matrix=[[1 / (1 + math.exp(-val)) for val in row] for row in x.matrix]
             )
         elif name == "tanh":
             return lambda x: Matrix(
-                matrix=[[math.tanh(val) for val in row] for row in x]
+                matrix=[[math.tanh(val) for val in row] for row in x.matrix]
             )
         else:
             raise ValueError(f"Unknown activation function: {name}")
@@ -281,7 +283,7 @@ class Perceptron:
     def _get_activation_function_derivative(name: str):
         if name == "relu":
             return lambda x: Matrix(
-                matrix=[[1 if val > 0 else 0 for val in row] for row in x]
+                matrix=[[1 if val > 0 else 0 for val in row] for row in x.matrix]
             )
         elif name == "sigmoid":
             return lambda x: Matrix(
@@ -290,12 +292,12 @@ class Perceptron:
                         (1 / (1 + math.exp(-val))) * (1 - (1 / (1 + math.exp(-val))))
                         for val in row
                     ]
-                    for row in x
+                    for row in x.matrix
                 ]
             )
         elif name == "tanh":
             return lambda x: Matrix(
-                matrix=[[1 - math.tanh(val) ** 2 for val in row] for row in x]
+                matrix=[[1 - math.tanh(val) ** 2 for val in row] for row in x.matrix]
             )
         else:
             raise ValueError(f"Unknown activation function: {name}")
@@ -396,4 +398,5 @@ class Perceptron:
 
     def infer(self, x: list[list]):
         x_mat = Matrix(matrix=x)
-        return x_mat * self.w_current + self.b_current
+        y = x_mat * self.w_current + self.b_current
+        return self.activation_function(y)
